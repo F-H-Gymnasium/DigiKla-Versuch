@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DigiKla - Portal</title>
+    <title>DigiKla - Schulportal</title>
     <link rel="stylesheet" href="style.css">
     
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -13,7 +13,7 @@
 <body>
 
     <div id="loginView" class="container" style="max-width: 400px; margin: 100px auto;">
-        <h2 style="color: #0284c7; text-align: center;">DigiKla Login</h2>
+        <h2 style="color: #0284c7; text-align: center; font-family: sans-serif;">DigiKla Login</h2>
         <div style="display: flex; flex-direction: column; gap: 15px;">
             <input type="email" id="loginEmail" placeholder="E-Mail">
             <input type="password" id="loginPassword" placeholder="Passwort">
@@ -24,14 +24,18 @@
 
     <div id="appView" style="display: none;">
         <header class="main-header">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-                <div class="logo" onclick="zeigeDashboard()" style="cursor: pointer;">DigiKla</div>
-                <button id="btnAbwesenheitHinzufuegen" class="btn btn-danger" style="display: none; padding: 6px 12px; font-size: 13px;" onclick="oeffneAbwesenheitModal()">+ Abwesenheit hinzufügen</button>
+            <div class="left-brand-panel">
+                <div class="logo" onclick="zeigeDashboard()">DIT</div>
+                <div class="sub-logo-text">statt GEO</div>
+                <button id="btnAbwesenheitHinzufuegen" class="btn-abwesenheit-add" onclick="oeffneAbwesenheitModal()">
+                    Abwesenheit hinzufügen
+                </button>
             </div>
+            
             <div class="user-info">
                 <span id="angemeldeterUser">Lade Profil...</span>
                 <span id="userRolleBadge" class="status-badge user-badge">Lehrer</span>
-                <span id="schuljahrAnzeige" style="margin-right: 15px; color: var(--warning); font-weight: bold;"></span>
+                <span id="schuljahrAnzeige" style="margin-right: 15px; color: #eab308; font-weight: bold;"></span>
                 
                 <select id="klassenAuswahl" onchange="stundenplanKlasseLadenAndRendern()" style="margin-right: 10px; display:none;"></select>
                 <input type="date" id="aktuellesDatum" onchange="datumGeaendert()">
@@ -48,7 +52,7 @@
                 <div class="section-header">
                     <h2>Mein Arbeitsbereich</h2>
                     <div class="info-badges">
-                        <span id="wochenTypAnzeige" class="status-badge" style="background: var(--primary);">A-Woche</span>
+                        <span id="wochenTypAnzeige" class="status-badge" style="background: #0284c7;">A-Woche</span>
                     </div>
                 </div>
                 
@@ -59,15 +63,15 @@
                         </div>
                         <div class="absences-container">
                             <div class="absence-group">
-                                <h4 style="color: var(--success); margin-bottom: 5px;">✔ Entschuldigt</h4>
+                                <h4 style="color: #16a34a; margin-bottom: 5px;">✔ Entschuldigt</h4>
                                 <ul id="listeEntschuldigt" class="dashboard-list"></ul>
                             </div>
                             <div class="absence-group" style="margin-top: 15px;">
-                                <h4 style="color: var(--warning); margin-bottom: 5px;">⏳ Abgemeldet / Ausflug</h4>
+                                <h4 style="color: #eab308; margin-bottom: 5px;">⏳ Abgemeldet / Gemeldet</h4>
                                 <ul id="listeAbgemeldet" class="dashboard-list"></ul>
                             </div>
                             <div class="absence-group" style="margin-top: 15px;">
-                                <h4 style="color: var(--danger); margin-bottom: 5px;">❌ Unentschuldigt</h4>
+                                <h4 style="color: #dc2626; margin-bottom: 5px;">❌ Unentschuldigt</h4>
                                 <ul id="listeUnentschuldigt" class="dashboard-list"></ul>
                             </div>
                         </div>
@@ -76,11 +80,11 @@
                     <div class="dashboard-col card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 300px; text-align: center; color: #64748b;">
                         <div style="font-size: 48px; margin-bottom: 15px;">🗓️</div>
                         <h3>Willkommen im Arbeitsbereich</h3>
-                        <p style="max-width: 300px; font-size: 14px; margin: 0 auto 20px auto;">Wähle rechts ein Klassenbuch oder eine andere Klasse aus, um die Tagesübersicht und Stundenpläne zu bearbeiten.</p>
+                        <p style="max-width: 300px; font-size: 14px; margin: 0 auto 20px auto;">Wähle das Klassenbuch aus, um Einträge und Fehlzeiten zu verwalten.</p>
                         <div class="todo-box" style="width: 100%; max-width: 280px; text-align: left;">
-                            <div class="todo-item alert-warning">
-                                <span>Nicht signierte Stunden</span>
-                                <span class="badge-count" id="countUnsigniert">0</span>
+                            <div class="todo-item alert-warning" style="background: #fef08a; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; color: #854d0e;">
+                                <span>Nicht signierter Unterricht</span>
+                                <span class="badge-count" id="countUnsigniert" style="font-weight: bold;">0</span>
                             </div>
                         </div>
                     </div>
@@ -110,7 +114,7 @@
                         <h2 id="klassenTitel">Klassenbuch Übersicht</h2>
                     </div>
                     <div class="info-badges">
-                        <span id="klassenleiterInfo" class="status-badge" style="background: var(--bg-input);">Klassenleiter: Lade...</span>
+                        <span id="klassenleiterInfo" class="status-badge" style="background: #334155;">Klassenleiter: ...</span>
                     </div>
                 </div>
                 <table class="stunden-tabelle">
@@ -139,29 +143,38 @@
                         <button id="btnSignumZuruecknehmen" class="btn btn-danger" onclick="signumZuruecknehmen()" style="display:none;">Signum zurücknehmen</button>
                     </div>
                 </div>
-                <div id="statusHinweisBox" style="display:none; padding:10px; border-radius:4px; margin-bottom:15px; text-align:center; font-weight:bold;"></div>
+                
                 <div class="detail-grid">
                     <div class="detail-left">
                         <div class="card"><h3>Unterrichtsthema</h3><textarea id="unterrichtsInhalt"></textarea></div>
                         <div class="card"><h3>Hausaufgaben</h3><textarea id="hausaufgabenInhalt"></textarea></div>
                     </div>
                     <div class="detail-right card">
-                        <h3>Schülerübersicht</h3>
+                        <h3>Schülerübersicht (Klassenbuch-Einträge)</h3>
                         <ul class="schueler-anwesenheits-liste" id="schuelerDetailListe"></ul>
                     </div>
                 </div>
             </section>
             
             <section id="stundenplanEditorView" style="display: none;">
-                <div class="detail-top-bar"><button class="btn btn-secondary" onclick="zurueckAusDetails()">🡠 Zurück</button><h2>Stundenplan bearbeiten</h2></div>
-                <div class="card" style="display:flex; gap:20px;"><select id="editWochentag" onchange="ladeEditorPlanForDay()"><option value="1">Montag</option><option value="2">Dienstag</option></select><select id="editWochenTyp" onchange="ladeEditorPlanForDay()"><option value="A">A-Woche</option><option value="B">B-Woche</option></select></div>
-                <div class="card"><table class="stunden-tabelle"><thead><tr><th>Stunde</th><th>Zeit</th><th>Fach</th><th>Lehrer</th></tr></thead><tbody id="editorStundenBody"></tbody></table><button class="btn btn-primary" style="margin-top:20px;" onclick="speichereStundenplan()">Speichern</button></div>
+                <div class="detail-top-bar"><button class="btn btn-secondary" onclick="zeigeDashboard()">🡠 Zurück</button><h2>Stundenplan bearbeiten</h2></div>
+                <div class="card" style="display:flex; gap:20px;">
+                    <select id="editWochentag" onchange="ladeEditorPlanForDay()"><option value="1">Montag</option><option value="2">Dienstag</option><option value="3">Mittwoch</option><option value="4">Donnerstag</option><option value="5">Freitag</option></select>
+                    <select id="editWochenTyp" onchange="ladeEditorPlanForDay()"><option value="A">A-Woche</option><option value="B">B-Woche</option></select>
+                </div>
+                <div class="card">
+                    <table class="stunden-tabelle">
+                        <thead><tr><th>Stunde</th><th>Zeit</th><th>Fach</th><th>Lehrer</th></tr></thead>
+                        <tbody id="editorStundenBody"></tbody>
+                    </table>
+                    <button class="btn btn-primary" style="margin-top:20px;" onclick="speichereStundenplan()">Speichern</button>
+                </div>
             </section>
 
             <section id="adminPanelView" style="display: none;">
-                <div class="detail-top-bar"><button class="btn btn-secondary" onclick="zeigeDashboard()">🡠 Zurück</button><h2>Admin Panel</h2></div>
-                </section>
-
+                <div class="detail-top-bar"><button class="btn btn-secondary" onclick="zeigeDashboard()">🡠 Zurück</button><h2>Admin-Konfiguration</h2></div>
+                <div class="card"><p>Globale Einstellungen und Nutzerverwaltung.</p></div>
+            </section>
         </main>
     </div>
 
@@ -179,7 +192,7 @@
                 
                 <div class="modal-icons">
                     <label title="Vorlage merken"><input type="checkbox" id="chkModalVorlage"> 💾</label>
-                    <label title="Geöffnet lassen"><input type="checkbox" id="chkModalAnpinnen"> 📌</label>
+                    <label title="Nach Speichern geöffnet lassen"><input type="checkbox" id="chkModalAnpinnen"> 📌</label>
                 </div>
             </div>
 
@@ -213,15 +226,15 @@
                 <div class="form-group" id="modalStundenGroup" style="display: none;">
                     <label>Stunden</label>
                     <div class="stunden-checker-grid">
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="Aus"> <span>Aus</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="1"> <span>1</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="2"> <span>2</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="3"> <span>3</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="4"> <span>4</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="5"> <span>5</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="6"> <span>6</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="7"> <span>7</span></label>
-                        <label class="stunde-chk-lbl"><input type="checkbox" value="8"> <span>8</span></label>
+                        <label class="stunde-chk-lbl stunde-aus"><input type="checkbox" value="Aus" id="chkStundeAus" onchange="toggleStundenAusOption(this)"> <span>Aus</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="1"> <span>1</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="2"> <span>2</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="3"> <span>3</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="4"> <span>4</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="5"> <span>5</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="6"> <span>6</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="7"> <span>7</span></label>
+                        <label class="stunde-chk-lbl"><input type="checkbox" class="stunde-num-chk" value="8"> <span>8</span></label>
                     </div>
                 </div>
 
@@ -237,13 +250,13 @@
 
                 <div class="form-group">
                     <label>Notiz zur Abwesenheit</label>
-                    <textarea id="modalNotiz" style="height: 60px;" placeholder="Bei Bedarf hier ein Notiz zur Abwesenheit eintragen"></textarea>
+                    <textarea id="modalNotiz" placeholder="Bei Bedarf hier ein Notiz zur Abwesenheit eintragen"></textarea>
                 </div>
             </div>
 
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="schliesseAbwesenheitModal()">Abbrechen</button>
-                <button class="btn btn-primary" style="background-color: #0369a1;" onclick="speichereAbwesenheitAusModal()">Speichern</button>
+                <button class="btn btn-abort" onclick="schliesseAbwesenheitModal()">Abbrechen</button>
+                <button class="btn btn-save" onclick="speichereAbwesenheitAusModal()">Speichern</button>
             </div>
         </div>
     </div>
