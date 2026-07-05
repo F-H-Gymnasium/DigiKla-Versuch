@@ -19,7 +19,6 @@ const db = firebase.firestore();
 let currentUserUID = null;
 let aktuelleRolle = "Lehrer";
 let MeinLehrerProfil = { name: "Lade...", kuerzel: "" };
-let AlleLehrerCache = {};
 let modalAusgewaehlteKategorie = "Unentschuldigt";
 
 // Auth State Observer
@@ -29,7 +28,6 @@ auth.onAuthStateChanged(user => {
         document.getElementById("loginView").style.display = "none";
         document.getElementById("appView").style.display = "block";
         
-        // Profildaten laden und danach Ansichten initialisieren
         db.collection("users").doc(user.uid).get().then(doc => {
             if (doc.exists) {
                 const data = doc.data();
@@ -41,16 +39,14 @@ auth.onAuthStateChanged(user => {
             document.getElementById("angemeldeterUser").innerText = `${MeinLehrerProfil.name} (${MeinLehrerProfil.kuerzel})`;
             document.getElementById("userRolleBadge").innerText = aktuelleRolle;
             
-            // Berechtigungsprüfung für den roten Abwesenheits-Button ausführen
             pruefeAbwesenheitsButtonBerechtigung();
 
             if(!document.getElementById("aktuellesDatum").value) {
                 document.getElementById("aktuellesDatum").value = new Date().toISOString().split('T')[0];
             }
             
-            // Dropdowns & Listen vorbereiten
             modalSchuelerDropdownBefuellen();
-            ladeKlassenAuswahlen();
+            ladeDashboardMeldungen();
         });
     } else {
         document.getElementById("loginView").style.display = "block";
@@ -58,24 +54,21 @@ auth.onAuthStateChanged(user => {
     }
 });
 
-// ==========================================================================
 // BERECHTIGUNGSPRÜFUNG FÜR DEN ROTEN BUTTON
-// ==========================================================================
 function pruefeAbwesenheitsButtonBerechtigung() {
     const btn = document.getElementById("btnAbwesenheitHinzufuegen");
+    if (!btn) return;
     
-    // Administratoren und Sekretariat dürfen den Button immer sehen
     if (aktuelleRolle === "Admin" || aktuelleRolle === "Sekretariat") {
         btn.style.display = "block";
         return;
     }
     
-    // Wenn die Rolle 'Lehrer' ist, prüfen wir ob er in der Datenbank als Klassenleiter eingetragen ist
     db.collection("klassen").where("klassenleiter", "==", currentUserUID).get().then(snapshot => {
         if (!snapshot.empty) {
-            btn.style.display = "block"; // Ist Klassenleiter -> anzeigen
+            btn.style.display = "block";
         } else {
-            btn.style.display = "none";  // Normaler Lehrer ohne Klassenleitung -> ausblenden
+            btn.style.display = "none";
         }
     }).catch(err => {
         console.error("Fehler bei Berechtigungsprüfung: ", err);
@@ -83,21 +76,16 @@ function pruefeAbwesenheitsButtonBerechtigung() {
     });
 }
 
-// ==========================================================================
 // POPUP DIALOG FUNKTIONEN (MODAL CONTROLLER)
-// ==========================================================================
 function oeffneAbwesenheitModal() {
     document.getElementById("abwesenheitModal").style.display = "flex";
     
-    // Synchronisiere Start- und Enddatum mit dem aktuell gesetzten Hauptdatum
     const masterDate = document.getElementById("aktuellesDatum").value;
     document.getElementById("modalDatumStart").value = masterDate;
     document.getElementById("modalDatumEnde").value = masterDate;
     
-    // Setze Standard-Kategorie auf Unentschuldigt (Rot)
     setModalStatusKategorie("Unentschuldigt");
     
-    // Falls "Vorlage merken" deaktiviert ist, Formularfelder zurücksetzen
     if (!document.getElementById("chkModalVorlage").checked) {
         document.getElementById("modalSchuelerSelect").value = "";
         document.getElementById("modalArtSelect").value = "Tag";
@@ -125,16 +113,13 @@ function setModalStatusKategorie(kat) {
 
 function anpassenAbwesenheitsartFelder() {
     const art = document.getElementById("modalArtSelect").value;
-    // Bis-Datum anzeigen wenn "Zeitraum" gewählt wurde
     document.getElementById("modalBisDatumGroup").style.display = (art === "Zeitraum") ? "flex" : "none";
-    // Stunden-Checker anzeigen wenn "Stunden" gewählt wurde
     document.getElementById("modalStundenGroup").style.display = (art === "Stunden") ? "flex" : "none";
 }
 
 function toggleStundenAusOption(src) {
     const numCheckboxes = document.querySelectorAll(".stunde-num-chk");
     if (src.checked) {
-        // Wenn "Aus" aktiv ist, werden alle numerischen Stunden deaktiviert
         numCheckboxes.forEach(cb => { cb.checked = false; cb.disabled = true; });
     } else {
         numCheckboxes.forEach(cb => { cb.disabled = false; });
@@ -149,6 +134,7 @@ function resetStundenCheckboxen() {
 
 function modalSchuelerDropdownBefuellen() {
     const select = document.getElementById("modalSchuelerSelect");
+    if(!select) return;
     select.innerHTML = '<option value="">-- Schüler wählen --</option>';
     
     db.collection("schueler").orderBy("name").get().then(snapshot => {
@@ -163,9 +149,43 @@ function modalSchuelerDropdownBefuellen() {
     });
 }
 
-// ==========================================================================
-// SPEICHERN DER ABWESENHEIT IN FIRESTORE
-// ==========================================================================
+// FIX: Behebt den Fehler an Zeile 349 (Sicherer Dom-Zugriff & Listen-Aktualisierung)
+function ladeDashboardMeldungen() {
+    const listE = document.getElementById("listeEntschuldigt");
+    const listG = document.getElementById("listeAbgemeldet");
+    const listU = document.getElementById("listeUnentschuldigt");
+    
+    if(!listE || !listG || !listU) return; // Verhindert Absturz, falls Elemente nicht auf der Seite sind
+    
+    const heute = document.getElementById("aktuellesDatum").value;
+    
+    db.collection("abwesenheiten_meldungen")
+      .where("datumStart", "<=", heute)
+      .get().then(snapshot => {
+          listE.innerHTML = "";
+          listG.innerHTML = "";
+          listU.innerHTML = "";
+          
+          let countE = 0, countG = 0, countU = 0;
+          
+          snapshot.forEach(doc => {
+              const data = doc.data();
+              if (heute <= data.datumEnde) {
+                  let li = document.createElement("li");
+                  li.innerHTML = `<strong>${data.schueler}</strong> (${data.klasse}) ${data.grund || 'Krank'}`;
+                  
+                  if(data.kategorie === "Entschuldigt") { listE.appendChild(li); countE++; }
+                  if(data.kategorie === "Gemeldet") { listG.appendChild(li); countG++; }
+                  if(data.kategorie === "Unentschuldigt") { listU.appendChild(li); countU++; }
+              }
+          });
+          
+          if(countE === 0) listE.innerHTML = "<li>Keine Einträge</li>";
+          if(countG === 0) listG.innerHTML = "<li>Keine Einträge</li>";
+          if(countU === 0) listU.innerHTML = "<li>Keine Einträge</li>";
+      });
+}
+
 function speichereAbwesenheitAusModal() {
     const schuelerNode = document.getElementById("modalSchuelerSelect");
     const schuelerName = schuelerNode.value;
@@ -193,113 +213,46 @@ function speichereAbwesenheitAusModal() {
         }
     }
 
-    // JSON Payload für die Datenbank generieren
     const abwesenheitsDaten = {
         schueler: schuelerName,
         klasse: klasse,
-        kategorie: modalAusgewaehlteKategorie, // "Unentschuldigt", "Gemeldet", "Entschuldigt"
-        art: art,                              // "Tag", "Stunden", "Zeitraum"
+        kategorie: modalAusgewaehlteKategorie,
+        art: art,
         datumStart: datumStart,
         datumEnde: datumEnde,
         stunden: gewaehlteStunden,
-        grund: grund || "",                    // "Abgemeldet", "Freistellung schulisch", "Freistellung außerschulisch" oder leer (Krank)
+        grund: grund || "",
         notiz: notiz,
         erstelltVon: currentUserUID,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
 
     db.collection("abwesenheiten_meldungen").add(abwesenheitsDaten).then(() => {
-        // Wenn "Anpinnen" (geöffnet lassen) nicht aktiv ist, schließen wir das Modal
         if (!document.getElementById("chkModalAnpinnen").checked) {
             schliesseAbwesenheitModal();
         }
-        
-        // Ansichten neu laden, um Änderungen sofort anzuzeigen
-        if(document.getElementById("dashboardView").style.display === "block") ladeDashboardMeldungen();
+        ladeDashboardMeldungen();
         if(document.getElementById("detailView").style.display === "block") rendereSchuelerAnwesenheitsListe();
     }).catch(err => {
         alert("Fehler beim Speichern: " + err.message);
     });
 }
 
-// ==========================================================================
-// INTERNATIONALE RENDERING-LOGIK FÜR DIE SCHÜLER-ÜBERWACHUNG (BILD 4 & 5)
-// ==========================================================================
-function rendereSchuelerAnwesenheitsListe() {
-    const listContainer = document.getElementById("schuelerDetailListe");
-    listContainer.innerHTML = ""; // Clear list
-    
-    const gewaehlteKlasse = document.getElementById("klassenAuswahl").value;
-    const aktuellesDatum = document.getElementById("aktuellesDatum").value;
-
-    // 1. Alle Schüler der Klasse holen
-    db.collection("schueler").where("klasse", "==", gewaehlteKlasse).orderBy("name").get().then(schuelerSnap => {
-        // 2. Alle Abwesenheitsdaten für diesen Tag laden
-        db.collection("abwesenheiten_meldungen")
-          .where("klasse", "==", gewaehlteKlasse)
-          .where("datumStart", "<=", aktuellesDatum)
-          .get().then(abwesenheitenSnap => {
-              
-              // Verarbeite Treffer (Berücksichtige Zeiträume)
-              let abwesenheitenMap = {};
-              abwesenheitenSnap.forEach(doc => {
-                  const abw = doc.data();
-                  if (aktuellesDatum <= abw.datumEnde) {
-                      abwesenheitenMap[abw.schueler] = abw;
-                  }
-              });
-
-              // 3. HTML Liste bauen
-              let index = 1;
-              schuelerSnap.forEach(sDoc => {
-                  const schueler = sDoc.data();
-                  const globalAbwesenheit = abwesenheitenMap[schueler.name];
-                  
-                  let row = document.createElement("li");
-                  row.className = "kb-schueler-row";
-                  
-                  let nameSpan = document.createElement("span");
-                  nameSpan.innerText = `${index}. ${schueler.name}`;
-                  row.appendChild(nameSpan);
-                  
-                  let statusBadge = document.createElement("span");
-                  
-                  if (globalAbwesenheit) {
-                      // Wenn ein Grund eingetragen ist (z.B. Abgemeldet, Freistellung) verwenden wir diesen, ansonsten "Krank"
-                      let textInBadge = globalAbwesenheit.grund || "Krank";
-                      statusBadge.innerText = textInBadge;
-                      
-                      // Bestimmung der CSS Klasse anhand der gewählten Farbkategorie
-                      if (globalAbwesenheit.kategorie === "Gemeldet") {
-                          statusBadge.className = "badge-anwesenheit-system badge-system-gemeldet";
-                      } else if (globalAbwesenheit.kategorie === "Entschuldigt") {
-                          statusBadge.className = "badge-anwesenheit-system badge-system-entschuldigt";
-                      } else {
-                          statusBadge.className = "badge-anwesenheit-system badge-system-unentschuldigt";
-                      }
-                  } else {
-                      // Standardfall: Keine Abwesenheit gemeldet -> Anwesend
-                      statusBadge.innerText = "Anwesend";
-                      statusBadge.className = "badge-anwesenheit-system badge-system-entschuldigt";
-                      statusBadge.style.opacity = "0.6";
-                  }
-                  
-                  row.appendChild(statusBadge);
-                  listContainer.appendChild(row);
-                  index++;
-              });
-        });
-    });
+function datumGeaendert() {
+    ladeDashboardMeldungen();
 }
 
-// Dummy-Funktionen für UI Navigation
 function zeigeDashboard() {
     document.getElementById("dashboardView").style.display = "block";
     document.getElementById("klassenbuchView").style.display = "none";
     document.getElementById("detailView").style.display = "none";
-    document.getElementById("stundenplanEditorView").style.display = "none";
-    document.getElementById("adminPanelView").style.display = "none";
 }
-function ladeKlassenAuswahlen() {}
-function login() {}
-function logout() { auth.signOut(); }
+
+// Dummy Login-Funktion für Entwicklungszwecke
+function login() {
+    const email = document.getElementById("loginEmail").value;
+    const pass = document.getElementById("loginPassword").value;
+    auth.signInWithEmailAndPassword(email, pass).catch(err => {
+        document.getElementById("loginError").innerText = err.message;
+    });
+}
