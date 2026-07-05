@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DigiKla - Schulportal</title>
+    <title>DIT statt GEO - Schulportal</title>
     <link rel="stylesheet" href="style.css">
     
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -35,7 +35,7 @@
             <div class="user-info">
                 <span id="angemeldeterUser">Lade Profil...</span>
                 <span id="userRolleBadge" class="status-badge user-badge">Lehrer</span>
-                <span id="schuljahrAnzeige" style="margin-right: 15px; color: #eab308; font-weight: bold;"></span>
+                <span id="schuljahrAnzeige" style="margin-right: 15px; color: #eab308; font-weight: bold;">Sj. 26/4</span>
                 
                 <select id="klassenAuswahl" onchange="stundenplanKlasseLadenAndRendern()" style="margin-right: 10px; display:none;"></select>
                 <input type="date" id="aktuellesDatum" onchange="datumGeaendert()">
@@ -50,58 +50,40 @@
             
             <section id="dashboardView">
                 <div class="section-header">
-                    <h2>Mein Arbeitsbereich</h2>
-                    <div class="info-badges">
-                        <span id="wochenTypAnzeige" class="status-badge" style="background: #0284c7;">A-Woche</span>
-                    </div>
+                    <h2 id="dashboardTitel">Mein Arbeitsbereich</h2>
+                    <span id="wochenTypAnzeige" class="wochen-badge">B-Woche (KW 28)</span>
                 </div>
                 
-                <div class="dashboard-grid">
-                    <div class="dashboard-col card">
-                        <div class="col-header">
-                            <h3>Abwesenheiten Heute</h3>
-                        </div>
+                <div class="dashboard-layout-row">
+                    <div class="dashboard-card main-absence-panel">
+                        <h3>Abwesenheiten Heute</h3>
                         <div class="absences-container">
                             <div class="absence-group">
-                                <h4 style="color: #16a34a; margin-bottom: 5px;">✔ Entschuldigt</h4>
-                                <ul id="listeEntschuldigt" class="dashboard-list"></ul>
+                                <h4 style="color: #22c55e; margin-bottom: 5px;">✓ Entschuldigt</h4>
+                                <ul id="listeEntschuldigt" class="dashboard-list">
+                                    <li>Keine Einträge</li>
+                                </ul>
                             </div>
                             <div class="absence-group" style="margin-top: 15px;">
                                 <h4 style="color: #eab308; margin-bottom: 5px;">⏳ Abgemeldet / Gemeldet</h4>
-                                <ul id="listeAbgemeldet" class="dashboard-list"></ul>
+                                <ul id="listeAbgemeldet" class="dashboard-list">
+                                    <li>Keine Einträge</li>
+                                </ul>
                             </div>
                             <div class="absence-group" style="margin-top: 15px;">
-                                <h4 style="color: #dc2626; margin-bottom: 5px;">❌ Unentschuldigt</h4>
-                                <ul id="listeUnentschuldigt" class="dashboard-list"></ul>
+                                <h4 style="color: #ef4444; margin-bottom: 5px;">❌ Unentschuldigt</h4>
+                                <ul id="listeUnentschuldigt" class="dashboard-list">
+                                    <li>Keine Einträge</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
 
-                    <div class="dashboard-col card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 300px; text-align: center; color: #64748b;">
-                        <div style="font-size: 48px; margin-bottom: 15px;">🗓️</div>
-                        <h3>Willkommen im Arbeitsbereich</h3>
-                        <p style="max-width: 300px; font-size: 14px; margin: 0 auto 20px auto;">Wähle das Klassenbuch aus, um Einträge und Fehlzeiten zu verwalten.</p>
-                        <div class="todo-box" style="width: 100%; max-width: 280px; text-align: left;">
-                            <div class="todo-item alert-warning" style="background: #fef08a; padding: 10px; border-radius: 4px; display: flex; justify-content: space-between; color: #854d0e;">
-                                <span>Nicht signierter Unterricht</span>
-                                <span class="badge-count" id="countUnsigniert" style="font-weight: bold;">0</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="dashboard-col">
-                        <div class="card">
-                            <h3>Klassenbuch</h3>
-                            <div class="quick-links-grid" id="meineKlassenLinks"></div>
-                        </div>
-                        <div class="card" style="margin-top: 20px;">
-                            <h3>Stundenplan anderer Klassen</h3>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <select id="klassenAuswahlDashboard" style="width: 100%;">
-                                    <option value="">-- Klasse wählen --</option>
-                                </select>
-                                <button class="btn btn-primary" onclick="oeffneFremdeKlasse()">Öffnen</button>
-                            </div>
+                    <div class="dashboard-footer-info">
+                        <div class="center-welcome">
+                            <div class="calendar-icon">📅</div>
+                            <h3>Willkommen im Arbeitsbereich</h3>
+                            <p>Wähle das Klassenbuch aus, um Einträge und Fehlzeiten zu verwalten.</p>
                         </div>
                     </div>
                 </div>
@@ -113,9 +95,7 @@
                         <button class="btn btn-secondary" onclick="zeigeDashboard()">🡠 Zum Arbeitsbereich</button>
                         <h2 id="klassenTitel">Klassenbuch Übersicht</h2>
                     </div>
-                    <div class="info-badges">
-                        <span id="klassenleiterInfo" class="status-badge" style="background: #334155;">Klassenleiter: ...</span>
-                    </div>
+                    <span id="klassenleiterInfo" class="status-badge" style="background: #334155;">Klassenleiter: ...</span>
                 </div>
                 <table class="stunden-tabelle">
                     <thead>
