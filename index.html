@@ -10,6 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
+<div id="sekBanner" class="sek-banner" style="display:none;" role="alert"></div>
 
 <div id="loginView" class="container" style="max-width:400px;margin:100px auto;">
     <h2 style="text-align:center;">DigiKla</h2>
@@ -37,50 +38,36 @@
     </header>
 
     <main class="content-container">
+        <nav class="tabs">
+            <button class="tab on" id="tabArbeit" onclick="zeigeDashboard()">🖥 Arbeitsbereich</button>
+            <button class="tab" id="tabAbw" onclick="zeigeAbwesenheiten()">📅 Abwesenheiten</button>
+        </nav>
 
         <section id="dashboardView">
-            <div class="section-header">
-                <h2>Mein Arbeitsbereich</h2>
-                <div class="info-badges"><span id="wochenTypAnzeige" class="status-badge">A-Woche</span></div>
+            <div class="panel-title"><div><h2>Arbeitsbereich</h2><div id="datumTitel"></div></div><span id="wochenTypAnzeige" class="status-badge"></span></div>
+            <div class="toolbar">
+                <button class="btn btn-danger" onclick="oeffneAbwesenheitModal()">👤 Abwesenheit hinzufügen</button>
+                <div class="datum-nav"><button class="btn btn-secondary" onclick="tagWechsel(-1)" aria-label="Vorheriger Tag">‹</button><button class="btn btn-secondary" onclick="heuteSetzen()">Heute</button><button class="btn btn-secondary" onclick="tagWechsel(1)" aria-label="Nächster Tag">›</button></div>
             </div>
-            <div class="dashboard-grid">
-                <div class="dashboard-col card">
-                    <div class="col-header">
-                        <h3>Abwesenheiten</h3>
-                        <button class="btn btn-danger" style="padding:4px 10px;font-size:13px;" onclick="oeffneAbwesenheitModal()">+ Abwesenheit</button>
-                    </div>
-                    <h4 style="color:var(--success);">✔ Entschuldigt</h4>
-                    <ul id="listeEntschuldigt" class="dashboard-list"></ul>
-                    <h4 style="color:var(--warning);margin-top:15px;">⏳ Abgemeldet / Ausflug</h4>
-                    <ul id="listeAbgemeldet" class="dashboard-list"></ul>
-                    <h4 style="color:var(--danger);margin-top:15px;">❌ Unentschuldigt</h4>
-                    <ul id="listeUnentschuldigt" class="dashboard-list"></ul>
-                </div>
+            <div class="dashboard-grid3">
+                <div class="panel"><div class="panel-head">Stundenplan <span id="planTitel"></span></div><div class="panel-body" id="meinPlanListe"></div></div>
+                <div class="panel"><div class="panel-head">Aufgaben</div><div class="panel-body">
+                    <div class="todo-item alert-warning"><span>Nicht signierter Unterricht</span><span class="badge-count" id="countUnsigniert">0</span></div>
+                    <div id="offeneListe" style="margin-top:10px;"></div></div></div>
+                <div class="panel"><div class="panel-head">Informationen</div><div class="panel-body">
+                    <h4>Klassenbuch</h4><div class="quick-links-grid" id="meineKlassenLinks"></div>
+                    <h4 style="margin-top:18px;">Stundenplan anderer Klassen</h4>
+                    <div style="display:flex;gap:8px;"><select id="klassenAuswahlDashboard" style="width:100%;"></select><button class="btn btn-primary" onclick="oeffneFremdeKlasse()">Öffnen</button></div></div></div>
+            </div>
+        </section>
 
-                <div class="dashboard-col card" style="text-align:center;min-height:300px;display:flex;flex-direction:column;justify-content:center;align-items:center;">
-                    <div style="font-size:48px;">🗓️</div>
-                    <h3>Willkommen im Arbeitsbereich</h3>
-                    <p style="max-width:300px;font-size:14px;color:var(--muted);">Wähle rechts eine Klasse, um Tagesübersicht, Stundenplan und Noten zu öffnen.</p>
-                    <div class="todo-box" style="width:100%;max-width:280px;text-align:left;">
-                        <div class="todo-item alert-warning"><span>Nicht signierte Stunden</span><span class="badge-count" id="countUnsigniert">0</span></div>
-                    </div>
-                </div>
-
-                <div class="dashboard-col">
-                    <div class="card">
-                        <h3>Klassenbuch</h3>
-                        <p style="font-size:13px;color:var(--muted);">Deine Klassen als Klassenleitung:</p>
-                        <div class="quick-links-grid" id="meineKlassenLinks"></div>
-                    </div>
-                    <div class="card">
-                        <h3>Andere Klassen</h3>
-                        <p style="font-size:13px;color:var(--muted);">Klassenbuch einer anderen Klasse aufrufen:</p>
-                        <div style="display:flex;gap:10px;">
-                            <select id="klassenAuswahlDashboard" style="width:100%;"></select>
-                            <button class="btn btn-primary" onclick="oeffneFremdeKlasse()">Öffnen</button>
-                        </div>
-                    </div>
-                </div>
+        <section id="abwesenheitenView" style="display:none;">
+            <div class="panel-title"><div><h2>Abwesenheiten</h2><div id="abwDatum"></div></div></div>
+            <div class="toolbar"><button class="btn btn-danger" onclick="oeffneAbwesenheitModal()">👤 Abwesenheit hinzufügen</button></div>
+            <div class="dashboard-grid3">
+                <div class="panel"><div class="panel-head">✔ Entschuldigt</div><div class="panel-body"><ul id="listeEntschuldigt" class="dashboard-list"></ul></div></div>
+                <div class="panel"><div class="panel-head">⏳ Abgemeldet / Ausflug</div><div class="panel-body"><ul id="listeAbgemeldet" class="dashboard-list"></ul></div></div>
+                <div class="panel"><div class="panel-head">❌ Unentschuldigt</div><div class="panel-body"><ul id="listeUnentschuldigt" class="dashboard-list"></ul></div></div>
             </div>
         </section>
 
@@ -102,24 +89,28 @@
         </section>
 
         <section id="detailView" style="display:none;">
-            <div class="detail-top-bar">
-                <button class="btn btn-secondary" onclick="zurueckAusDetails()">🡠 Zurück</button>
+            <div class="panel-title">
                 <h2 id="detailStundeTitel">Stunden-Details</h2>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button id="btnUnterrichtAendern" class="btn btn-secondary" onclick="unterrichtAendernDialog()">Unterricht ändern</button>
-                    <button id="btnUnterrichtUebernehmen" class="btn btn-secondary" onclick="unterrichtUebernehmenDialog()">Unterricht übernehmen</button>
-                    <button id="btnStundeSpeichern" class="btn btn-secondary" onclick="stundeSpeichern()">Speichern</button>
-                    <button id="btnUnterrichtSignieren" class="btn btn-primary" onclick="stundeSignieren()">Unterricht signieren</button>
+                <div class="aktionen">
+                    <button class="btn" onclick="zurueckAusDetails()">🡠 Zurück</button>
+                    <button id="btnUnterrichtAendern" class="btn" onclick="unterrichtAendernDialog()">Unterricht ändern</button>
+                    <button id="btnUnterrichtUebernehmen" class="btn" onclick="unterrichtUebernehmenDialog()">⇄ Unterricht übernehmen</button>
+                    <button id="btnStundeSpeichern" class="btn" onclick="stundeSpeichern()">Speichern</button>
+                    <button id="btnUnterrichtSignieren" class="btn" onclick="stundeSignieren()">✔ Unterricht signieren</button>
                     <button id="btnSignumZuruecknehmen" class="btn btn-danger" onclick="signumZuruecknehmen()" style="display:none;">Signum zurücknehmen</button>
                 </div>
             </div>
-            <div id="statusHinweisBox" style="display:none;padding:10px;border-radius:6px;margin-bottom:15px;text-align:center;font-weight:bold;"></div>
+            <div id="statusHinweisBox" style="display:none;padding:10px;margin-bottom:15px;text-align:center;font-weight:bold;"></div>
             <div class="detail-grid">
                 <div>
-                    <div class="card"><h3>Unterrichtsthema</h3><textarea id="unterrichtsInhalt" placeholder="Unterrichtsinhalt hier eintragen..."></textarea></div>
-                    <div class="card"><h3>Hausaufgaben</h3><textarea id="hausaufgabenInhalt" placeholder="Hausaufgaben..."></textarea></div>
+                    <div class="panel"><div class="panel-head">Unterrichtsthema</div><div class="panel-body">
+                        <input type="text" id="unterrichtsThema" placeholder="Unterrichtsthema" style="width:100%;" oninput="themaHinweisPruefen()">
+                        <div id="themaHinweis" class="thema-hinweis">Unterrichtsthema wird benötigt</div>
+                        <label style="margin-top:12px;">Unterrichtsinhalt</label>
+                        <textarea id="unterrichtsInhalt" placeholder="Unterrichtsinhalt..."></textarea></div></div>
+                    <div class="panel"><div class="panel-head">Hausaufgaben</div><div class="panel-body"><textarea id="hausaufgabenInhalt" placeholder="Hausaufgaben..."></textarea></div></div>
                 </div>
-                <div class="card"><h3>Schülerübersicht</h3><ul class="schueler-anwesenheits-liste" id="schuelerDetailListe"></ul></div>
+                <div class="panel"><div class="panel-head">Schülerübersicht</div><div class="panel-body"><ul class="schueler-anwesenheits-liste" id="schuelerDetailListe"></ul></div></div>
             </div>
         </section>
 
