@@ -17,12 +17,14 @@ const db = firebase.firestore();
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const heute = () => new Date().toLocaleDateString("sv-SE");
-const VIEWS = ["dashboardView", "klassenbuchView", "detailView", "notenView", "stundenplanEditorView", "adminPanelView"];
+const TAGE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const datumDE = d => d.split("-").reverse().join(".");
+const VIEWS = ["dashboardView", "klassenbuchView", "abwesenheitenView", "detailView", "notenView", "stundenplanEditorView", "adminPanelView"];
 const STATUS = [["Anwesend", "Anwesend"], ["Unentschuldigt", "Unentschuldigt fehlt"], ["Verspätet", "Verspätet"], ["Entschuldigt", "Entschuldigt"], ["Freigestellt", "Freigestellt"]];
 
 let rolle = "Lehrer", uid = null, profil = null, stdNr = null;
 let plan = [], schueler = [], zeiten = [], lehrer = {}, cfg = { text: "", start: "", end: "" };
-let ansicht = "dashboardView", dashZaehler = 0, notenCtx = {};
+let ansicht = "dashboardView", dashZaehler = 0, notenCtx = {}, aktLeiter = "", alarmStop = null, bekannt = new Set(), audioCtx = null;
 
 const klasse = () => $("klassenAuswahl").value;
 const datum = () => $("aktuellesDatum").value;
@@ -33,6 +35,8 @@ const anzahlStunden = () => Math.max(zeiten.length, 6);
 
 function showView(id) {
     ansicht = id;
+    $("tabArbeit").classList.toggle("on", id === "dashboardView");
+    $("tabAbw").classList.toggle("on", id === "abwesenheitenView");
     VIEWS.forEach(v => $(v).style.display = v === id ? "block" : "none");
 }
 
@@ -58,14 +62,14 @@ $("loginPassword").addEventListener("keydown", e => e.key === "Enter" && login()
 auth.onAuthStateChanged(async user => {
     $("loginView").style.display = user ? "none" : "block";
     $("appView").style.display = user ? "block" : "none";
-    if (!user) return;
+    if (!user) { if (alarmStop) alarmStop(); alarmStop = null; $("sekBanner").style.display = "none"; return; }
     uid = user.uid;
     try {
-        await Promise.all([ladeEinstellungen(), ladeLehrer()]);
-        profil = lehrer[uid];
-        if (!profil) throw new Error("kein Profil");
         const u = await db.collection("users").doc(uid).get();
         rolle = u.exists ? (u.data().rolle || "Lehrer") : "Lehrer";
+        await Promise.all([ladeEinstellungen(), ladeLehrer()]);
+        profil = lehrer[uid] || (rolle === "Sekretariat" ? { name: u.data().name || "Sekretariat", kuerzel: "" } : null);
+        if (!profil) throw new Error("kein Profil");
     } catch (e) {
         $("loginError").innerText = `Kein Zugriff: Für dein Konto gibt es kein Lehrerprofil. Deine UID: ${uid}`;
         return auth.signOut();
@@ -74,6 +78,7 @@ auth.onAuthStateChanged(async user => {
     $("userRolleBadge").innerText = rolle;
     $("adminPanelBtn").style.display = rolle === "Admin" ? "inline-block" : "none";
     if (!datum()) $("aktuellesDatum").value = heute();
+    if (rolle === "Sekretariat") startAlarm();
     await klassenLaden();
     zeigeDashboard();
 });
@@ -110,7 +115,7 @@ async function klassenLaden() {
 }
 
 function datumGeaendert() {
-    if (ansicht === "dashboardView") arbeitsbereichLaden();
+    if (ansicht === "dashboardView" || ansicht === "abwesenheitenView") arbeitsbereichLaden();
     else if (ansicht === "klassenbuchView") klassenbuchLaden();
 }
 
@@ -126,19 +131,20 @@ function zeigeDashboard() {
 // ==========================================================================
 async function arbeitsbereichLaden() {
     const meine = ++dashZaehler, d = datum(), w = wochenInfo(d);
+    const titel = `${TAGE[w.tag]}, ${datumDE(d)}`;
+    ["datumTitel", "planTitel", "abwDatum"].forEach(id => $(id).innerText = titel);
     $("wochenTypAnzeige").innerText = `${w.typ}-Woche (KW ${w.kw})`;
-    const liste = { E: [], A: [], U: [] }, gesehen = new Set();
-    let offen = 0;
+    const liste = { E: [], A: [], U: [] }, gesehen = new Set(), mein = [];
 
     if (w.werktag) {
         const klassen = await db.collection("klassen").get();
         await Promise.all(klassen.docs.map(async k => {
             const pd = await planRef(k.id, w.id).get();
-            const stunden = pd.exists ? pd.data().stunden || [] : [];
-            await Promise.all(stunden.map(async s => {
+            await Promise.all((pd.exists ? pd.data().stunden || [] : []).map(async s => {
                 const b = await db.collection("klassenbuch").doc(keyOf(k.id, d, s.std)).get();
                 const x = b.exists ? b.data() : {};
-                if (!x.istAusfall && !x.isSigniert && (x.vLehrer || s.lehrer) === profil.kuerzel) offen++;
+                if (!x.istAusfall && profil.kuerzel && (x.vLehrer || s.lehrer) === profil.kuerzel)
+                    mein.push({ k: k.id, std: s.std, fach: x.vFach || s.fach, signiert: !!x.isSigniert });
                 Object.entries(x.anwesenheit || {}).forEach(([name, st]) => {
                     const id = k.id + "|" + name;
                     if (st === "Anwesend" || gesehen.has(id)) return;
@@ -152,11 +158,22 @@ async function arbeitsbereichLaden() {
         }));
     }
     if (meine !== dashZaehler) return;   // neuere Abfrage läuft schon
+    mein.sort((a, b) => a.std - b.std || a.k.localeCompare(b.k));
+    const zeile = m => `<div class="plan-zeile"><span><strong>${m.std}.</strong> ${esc(m.fach)} · Klasse ${esc(m.k)} ${m.signiert ? "✔" : ""}</span><button class="btn btn-secondary" style="padding:3px 10px;" onclick="oeffneStundeAusDashboard('${esc(m.k)}', ${m.std})">Öffnen</button></div>`;
+    const offene = mein.filter(m => !m.signiert);
+    $("meinPlanListe").innerHTML = mein.map(zeile).join("") || "<p class='mute'>Kein Unterricht für heute</p>";
+    $("offeneListe").innerHTML = offene.map(zeile).join("");
+    $("countUnsigniert").innerText = offene.length;
     const leer = "<li style='color:var(--muted);font-style:italic;'>Keine Einträge</li>";
     $("listeEntschuldigt").innerHTML = liste.E.join("") || leer;
     $("listeAbgemeldet").innerHTML = liste.A.join("") || leer;
     $("listeUnentschuldigt").innerHTML = liste.U.join("") || leer;
-    $("countUnsigniert").innerText = offen;
+}
+
+async function oeffneStundeAusDashboard(k, std) {
+    $("klassenAuswahl").value = k;
+    await klassenDatenLaden();
+    oeffneStunde(std);
 }
 
 // ==========================================================================
@@ -175,23 +192,25 @@ function oeffneFremdeKlasse() {
     oeffneKlassenbuch(k);
 }
 
+async function klassenDatenLaden() {
+    const k = klasse(), w = wochenInfo(datum());
+    const [kd, ss, pd] = await Promise.all([
+        db.collection("klassen").doc(k).get(),
+        db.collection("schueler").where("klasse", "==", k).get(),
+        w.werktag ? planRef(k, w.id).get() : Promise.resolve(null)
+    ]);
+    aktLeiter = kd.exists ? kd.data().klassenleiter || "" : "";
+    schueler = ss.docs.map(x => x.data().name).sort((a, b) => a.localeCompare(b, "de"));
+    plan = (pd && pd.exists ? pd.data().stunden || [] : []).sort((a, b) => a.std - b.std);
+}
+
 async function klassenbuchLaden() {
     const k = klasse(), d = datum(), w = wochenInfo(d), tb = $("tagesStundenBody");
     $("klassenTitel").innerText = `Klassenbuch Klasse ${k}`;
     if (!w.werktag) { tb.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Wochenende</td></tr>"; return; }
-
-    const kl = db.collection("klassen").doc(k);
-    const [kd, ss, pd] = await Promise.all([
-        kl.get(),
-        db.collection("schueler").where("klasse", "==", k).get(),
-        planRef(k, w.id).get()
-    ]);
-    const leiter = kd.exists ? kd.data().klassenleiter || "" : "";
-    $("klassenleiterInfo").innerText = `Klassenleiter: ${lehrer[leiter]?.name || "Keiner"}`;
-    $("stundenplanEditBtn").style.display = rolle === "Admin" || uid === leiter ? "inline-block" : "none";
-    schueler = ss.docs.map(x => x.data().name).sort((a, b) => a.localeCompare(b, "de"));
-    plan = (pd.exists ? pd.data().stunden || [] : []).sort((a, b) => a.std - b.std);
-
+    await klassenDatenLaden();
+    $("klassenleiterInfo").innerText = `Klassenleiter: ${lehrer[aktLeiter]?.name || "Keiner"}`;
+    $("stundenplanEditBtn").style.display = rolle === "Admin" || uid === aktLeiter ? "inline-block" : "none";
     if (!plan.length) { tb.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Kein Plan eingetragen.</td></tr>"; return; }
     const docs = await Promise.all(plan.map(s => db.collection("klassenbuch").doc(keyOf(k, d, s.std)).get()));
 
@@ -218,7 +237,8 @@ async function klassenbuchLaden() {
 
 // ==========================================================================
 // STUNDE ÖFFNEN & BEARBEITEN
-// Regel: nur Fachlehrer (oder Vertretung) bearbeitet; andere können übernehmen.
+// Eintragen: nur Fachlehrer/Vertretung/Admin. Sekretariat: nie.
+// Entschuldigen/Freistellen: Sekretariat, Admin, Klassenleitung der eigenen Klasse.
 // ==========================================================================
 async function oeffneStunde(std) {
     stdNr = std;
@@ -226,42 +246,58 @@ async function oeffneStunde(std) {
     const doc = await stdRef(std).get();
     const x = doc.exists ? doc.data() : {};
     const lk = x.vLehrer || info.lehrer, ausfall = !!x.istAusfall, signiert = !!x.isSigniert;
-    const berechtigt = rolle === "Admin" || (lk === profil.kuerzel && !ausfall);
+    const kannEintragen = rolle !== "Sekretariat";
+    const berechtigt = rolle === "Admin" || (kannEintragen && !!profil.kuerzel && lk === profil.kuerzel && !ausfall);
     const gesperrt = signiert || !berechtigt;
+    const darfEntsch = rolle === "Admin" || rolle === "Sekretariat" || uid === aktLeiter;
 
-    $("unterrichtsInhalt").value = x.thema || "";
+    $("detailStundeTitel").innerText = `${TAGE[wochenInfo(datum()).tag]}, ${datumDE(datum())} ${x.vFach || info.fach} | Klasse: ${klasse()} | Lehrer: ${lehrer[Object.keys(lehrer).find(u => lehrer[u].kuerzel === lk)]?.name || lk}`;
+    $("unterrichtsThema").value = x.thema || "";
+    $("unterrichtsInhalt").value = x.inhalt || "";
     $("hausaufgabenInhalt").value = x.hausaufgaben || "";
-    $("unterrichtsInhalt").disabled = $("hausaufgabenInhalt").disabled = gesperrt;
-    $("detailStundeTitel").innerText = `${std}. Stunde - ${x.vFach || info.fach} (Klasse ${klasse()} / ${lk})`;
+    [$("unterrichtsThema"), $("unterrichtsInhalt"), $("hausaufgabenInhalt")].forEach(e => e.disabled = gesperrt);
+    themaHinweisPruefen();
+    $("themaHinweis").style.display = !gesperrt && !x.thema ? "block" : "none";
 
     const h = $("statusHinweisBox");
     h.style.display = gesperrt ? "block" : "none";
     h.style.background = signiert ? "var(--success-soft)" : "var(--bg-input)";
-    h.innerText = signiert ? "Gesperrt: Diese Stunde wurde elektronisch signiert." : "Schreibgeschützt: Nicht dein Fachlehrer-Kürzel.";
+    h.innerText = signiert ? "Gesperrt: Diese Stunde wurde elektronisch signiert."
+        : kannEintragen ? "Schreibgeschützt: Nicht dein Fachlehrer-Kürzel." : "Das Sekretariat kann Abwesenheiten bearbeiten, aber keine Einträge machen.";
 
     const an = (id, ok) => $(id).style.display = ok ? "inline-block" : "none";
     an("btnUnterrichtAendern", berechtigt && !signiert);
     an("btnStundeSpeichern", berechtigt && !signiert);
     an("btnUnterrichtSignieren", berechtigt && !signiert);
-    an("btnUnterrichtUebernehmen", !signiert && (lk !== profil.kuerzel || ausfall));
+    an("btnUnterrichtUebernehmen", kannEintragen && !signiert && (lk !== profil.kuerzel || ausfall));
     an("btnSignumZuruecknehmen", signiert && berechtigt);
 
-    $("schuelerDetailListe").innerHTML = schueler.map(n => {
-        const st = x.anwesenheit?.[n] || "Anwesend";
-        return `<li class="schueler-item"><strong>${esc(n)}</strong>
-            <select class="status-select" data-name="${esc(n)}" ${gesperrt ? "disabled" : ""} onchange="statusSpeichern(this)">
-            ${STATUS.map(([v, t]) => `<option value="${v}" ${v === st ? "selected" : ""}>${t}</option>`).join("")}</select></li>`;
+    $("schuelerDetailListe").innerHTML = schueler.map((n, i) => {
+        const st = x.anwesenheit?.[n] || "Anwesend", da = st === "Anwesend";
+        const kipp = `<label class="kipp"><input type="checkbox" data-name="${esc(n)}" ${da ? "checked" : ""} ${gesperrt ? "disabled" : ""} onchange="anwesenheitKippen(this)" aria-label="Anwesend"><span class="kipp-ui"></span></label>`;
+        const extra = da ? "" : darfEntsch
+            ? `<select class="status-select" data-name="${esc(n)}" onchange="statusWaehlen(this)">${["Unentschuldigt", "Entschuldigt", "Freigestellt"].map(o => `<option value="${o}" ${o === st ? "selected" : ""}>${o === "Unentschuldigt" ? "Unentschuldigt fehlt" : o}</option>`).join("")}</select>`
+            : `<small class="mute">${esc(st)}</small>`;
+        return `<li class="schueler-item"><span class="nr">${i + 1}</span>${kipp}<span class="sname">${esc(n)}</span>${extra}</li>`;
     }).join("");
     showView("detailView");
 }
 
 const zurueckAusDetails = () => oeffneKlassenbuch(klasse());
-const stundeSetzen = obj => stdRef(stdNr).set(obj, { merge: true }).then(() => oeffneStunde(stdNr));
-const textFelder = () => ({ thema: $("unterrichtsInhalt").value, hausaufgaben: $("hausaufgabenInhalt").value });
+const stundeSetzen = obj => stdRef(stdNr).set({ datum: datum(), klasse: klasse(), ...obj }, { merge: true }).then(() => oeffneStunde(stdNr));
+const textFelder = () => ({ thema: $("unterrichtsThema").value.trim(), inhalt: $("unterrichtsInhalt").value, hausaufgaben: $("hausaufgabenInhalt").value });
 const stundeSpeichern = () => stundeSetzen(textFelder()).then(() => alert("Gespeichert."));
-const stundeSignieren = () => stundeSetzen({ ...textFelder(), isSigniert: true });
 const signumZuruecknehmen = () => stundeSetzen({ isSigniert: false });
-const statusSpeichern = sel => stdRef(stdNr).set({ anwesenheit: { [sel.dataset.name]: sel.value } }, { merge: true });
+const themaHinweisPruefen = () => $("themaHinweis").style.display = $("unterrichtsThema").value.trim() ? "none" : "block";
+const setzeStatus = (n, st) => stundeSetzen({ anwesenheit: { [n]: st } });
+const anwesenheitKippen = cb => setzeStatus(cb.dataset.name, cb.checked ? "Anwesend" : "Unentschuldigt");
+const statusWaehlen = sel => setzeStatus(sel.dataset.name, sel.value);
+
+function stundeSignieren() {
+    const t = textFelder();
+    if (!t.thema) return alert("Bitte zuerst ein Unterrichtsthema eintragen.");
+    stundeSetzen({ ...t, isSigniert: true });
+}
 
 function unterrichtAendernDialog() {
     const f = prompt("Neues Fachkürzel eingeben (oder 'AUSFALL' für Stundenausfall):");
@@ -473,10 +509,63 @@ async function speichereAbwesenheitAusModal() {
     for (const s of (pd.exists ? pd.data().stunden || [] : [])) {
         const ref = db.collection("klassenbuch").doc(keyOf(k, d, s.std)), doc = await ref.get();
         if (doc.exists && doc.data().isSigniert) continue;   // signierte Stunden bleiben gesperrt
-        await ref.set({ anwesenheit: { [n]: st } }, { merge: true });
+        await ref.set({ datum: d, klasse: k, anwesenheit: { [n]: st } }, { merge: true });
         anzahl++;
     }
     alert(`Status '${st}' für ${n} (Klasse ${k}) in ${anzahl} Stunde(n) eingetragen.`);
     schliesseAbwesenheitModal();
     arbeitsbereichLaden();
+}
+
+
+// ==========================================================================
+// TAGE, ABWESENHEITEN-TAB
+// ==========================================================================
+function tagWechsel(n) {
+    const d = new Date(datum() + "T12:00:00");
+    d.setDate(d.getDate() + n);
+    $("aktuellesDatum").value = d.toLocaleDateString("sv-SE");
+    datumGeaendert();
+}
+function heuteSetzen() { $("aktuellesDatum").value = heute(); datumGeaendert(); }
+function zeigeAbwesenheiten() {
+    showView("abwesenheitenView");
+    $("klassenAuswahl").style.display = "none";
+    $("stundenplanEditBtn").style.display = "none";
+    arbeitsbereichLaden();
+}
+
+// ==========================================================================
+// SEKRETARIAT: roter Balken + Ton, sobald ein Schüler unentschuldigt fehlt
+// (Live-Abfrage; benötigt das Feld "datum" in klassenbuch, wird beim Speichern gesetzt)
+// ==========================================================================
+function piepton() {
+    try {
+        audioCtx = audioCtx || new AudioContext();
+        audioCtx.resume();
+        [0, 0.35, 0.7].forEach(t => {
+            const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.frequency.value = 880; g.gain.value = 0.2;
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.2);
+        });
+    } catch (e) { /* Ton nicht möglich */ }
+}
+
+function startAlarm() {
+    if (alarmStop) alarmStop();
+    document.addEventListener("click", () => { audioCtx = audioCtx || new AudioContext(); audioCtx.resume(); }, { once: true });
+    alarmStop = db.collection("klassenbuch").where("datum", "==", heute()).onSnapshot(snap => {
+        const offen = new Map();
+        snap.forEach(doc => {
+            const x = doc.data();
+            Object.entries(x.anwesenheit || {}).forEach(([n, st]) => { if (st === "Unentschuldigt") offen.set(`${x.klasse}|${n}`, { klasse: x.klasse, name: n }); });
+        });
+        const neu = [...offen.keys()].some(k => !bekannt.has(k));
+        bekannt = new Set(offen.keys());
+        const b = $("sekBanner");
+        b.style.display = offen.size ? "flex" : "none";
+        b.innerHTML = `<strong>⚠ Unentschuldigt fehlt:</strong><span>${[...offen.values()].map(l => `${esc(l.name)} (${esc(l.klasse)})`).join(", ")}</span><button class="btn btn-secondary" onclick="piepton()">🔔 Ton testen</button>`;
+        if (neu) piepton();
+    }, err => console.error("Alarm-Abfrage fehlgeschlagen", err));
 }
