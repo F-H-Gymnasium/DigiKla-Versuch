@@ -174,3 +174,47 @@ select.status-select { padding: 6px; }
 .note-del { background: none; border: 0; color: var(--danger); cursor: pointer; margin-left: 4px; }
 .note-form { display: flex; gap: 6px; align-items: center; }
 .note-form input { width: 70px; }
+
+/* ---------- Layout im FuxNoten-Stil ---------- */
+.mute { color: var(--muted); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+.tab { background: var(--kreide); color: #2b2300; border: 1px solid #d9b92f; border-bottom-width: 3px; border-radius: 6px 6px 0 0; padding: 10px 20px; cursor: pointer; font: inherit; font-weight: 600; }
+.tab.on { background: var(--tafel); color: #fff; border-color: var(--tafel); }
+
+.panel-title { background: var(--tafel); color: #fff; padding: 14px 20px; border-radius: 8px 8px 0 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.panel-title h2 { color: #fff; margin: 0; }
+.panel-title .btn { background: var(--kreide); color: #2b2300; border-color: transparent; }
+.panel-title .btn-danger { background: var(--danger); color: #fff; }
+.aktionen { display: flex; gap: 8px; flex-wrap: wrap; }
+.toolbar { background: #fff; border: 1px solid var(--border); border-top: 0; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; border-radius: 0 0 8px 8px; }
+.datum-nav { display: flex; gap: 4px; }
+
+.panel { background: #fff; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 20px; overflow: hidden; }
+.panel-head { background: var(--tafel); color: #fff; text-align: center; padding: 10px; font-weight: 600; }
+.panel-body { padding: 14px; }
+.dashboard-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 1050px) { .dashboard-grid3 { grid-template-columns: 1fr; } }
+.plan-zeile { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 6px; background: var(--bg-input); border-radius: 6px; }
+
+.thema-hinweis { display: none; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--danger); border-radius: 6px; color: var(--danger); }
+
+/* ---------- Kippschalter Anwesend / Abwesend ---------- */
+.schueler-item { gap: 10px; justify-content: flex-start; }
+.schueler-item .nr { width: 22px; color: var(--muted); }
+.schueler-item .sname { flex: 1; font-weight: 600; }
+.kipp { position: relative; display: inline-block; margin: 0; }
+.kipp input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
+.kipp-ui { display: inline-flex; align-items: center; gap: 6px; flex-direction: row; min-width: 78px; padding: 3px 10px 3px 4px; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 700; font-size: 13px; }
+.kipp-ui::before { content: ""; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+.kipp-ui::after { content: "Abw."; }
+.kipp input:checked + .kipp-ui { background: var(--success); flex-direction: row-reverse; padding: 3px 4px 3px 10px; }
+.kipp input:checked + .kipp-ui::after { content: "Anw."; }
+.kipp input:focus-visible + .kipp-ui { outline: 2px solid var(--tafel); outline-offset: 2px; }
+.kipp input:disabled { cursor: not-allowed; }
+.kipp input:disabled + .kipp-ui { opacity: .55; }
+
+/* ---------- Sekretariat-Alarm ---------- */
+.sek-banner { position: sticky; top: 0; z-index: 10000; background: var(--danger); color: #fff; padding: 12px 20px; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 16px; animation: sekblink 1.2s ease-in-out infinite; }
+.sek-banner span { flex: 1; }
+@keyframes sekblink { 50% { background: #8f2a24; } }
+@media (prefers-reduced-motion: reduce) { .sek-banner { animation: none; } }
