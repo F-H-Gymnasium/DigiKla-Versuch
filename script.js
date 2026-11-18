@@ -24,6 +24,7 @@ const datumDE = d => d.split("-").reverse().join(".");
 const FARBE = { Unentschuldigt: "u", Gemeldet: "g", Entschuldigt: "e" };
 const LEGACY = { Unentschuldigt: "Unentschuldigt", Verspätet: "Gemeldet", Entschuldigt: "Entschuldigt", Freigestellt: "Entschuldigt" };
 const deckt = (a, d, std) => a.von <= d && d <= a.bis && (a.art !== "Stunden" || (a.stunden || []).includes(std));
+const abwBereich = e => e.art === "Zeitraum" ? `${datumDE(e.von)} - ${datumDE(e.bis)}` : e.art === "Stunden" ? `${datumDE(e.von)}, Std. ${(e.stunden || []).join(", ")}` : datumDE(e.von);
 
 // Wer fehlt in dieser Stunde? Abwesenheits-Einträge überschreiben den Kippschalter der Lehrkraft.
 function abwesende(k, d, std, x, abw) {
@@ -40,7 +41,7 @@ const STATUS = [["Anwesend", "Anwesend"], ["Unentschuldigt", "Unentschuldigt feh
 
 let rolle = "Lehrer", uid = null, profil = null, stdNr = null;
 let plan = [], schueler = [], zeiten = [], lehrer = {}, cfg = { text: "", start: "", end: "" };
-let ansicht = "dashboardView", dashZaehler = 0, notenCtx = {}, aktLeiter = "", gruende = [], abwFarbe = "Unentschuldigt", klassenLeiter = {}, alarmStop = null, bekannt = new Set(), audioCtx = null;
+let ansicht = "dashboardView", dashZaehler = 0, notenCtx = {}, aktLeiter = "", gruende = [], abwFarbe = "Unentschuldigt", abwBearbeiten = null, klasseAbw = [], klassenLeiter = {}, alarmStop = null, bekannt = new Set(), audioCtx = null;
 
 const klasse = () => $("klassenAuswahl").value;
 const datum = () => $("aktuellesDatum").value;
@@ -156,7 +157,7 @@ async function arbeitsbereichLaden() {
 
     const [klassen, abwSnap] = await Promise.all([db.collection("klassen").get(), db.collection("abwesenheiten").where("bis", ">=", d).get()]);
     const abw = abwSnap.docs.map(x => ({ id: x.id, ...x.data() })).filter(a => a.von <= d);
-    abw.forEach(a => tab.set(`${a.klasse}|${a.schueler}`, { klasse: a.klasse, name: a.schueler, status: a.status, grund: a.grund }));
+    abw.forEach(a => tab.set(`${a.klasse}|${a.schueler}`, { klasse: a.klasse, name: a.schueler, status: a.status, grund: a.grund, rec: true }));
 
     if (w.werktag) {
         await Promise.all(klassen.docs.map(async k => {
@@ -170,6 +171,16 @@ async function arbeitsbereichLaden() {
                     mein.push({ k: k.id, std: s.std, zeit: s.zeit, fach: x.vFach || s.fach, signiert: !!x.isSigniert, absent: ab });
             }));
         }));
+    }
+    // Klassenleitung: offene Abwesenheiten (gemeldet / unentschuldigt) der eigenen Klasse(n)
+    const meineKl = Object.keys(klassenLeiter).filter(k => klassenLeiter[k] === uid);
+    const klasseAbwNeu = [];
+    if (meineKl.length) {
+        const sn = await db.collection("abwesenheiten").where("klasse", "in", meineKl.slice(0, 30)).get();
+        sn.docs.forEach(q => { const a = q.data(); if (a.status !== "Entschuldigt") klasseAbwNeu.push({ id: q.id, ...a, name: a.schueler }); });
+        [...tab.values()].filter(e => !e.rec && meineKl.includes(e.klasse) && e.status !== "Entschuldigt")
+            .forEach(e => klasseAbwNeu.push({ ...e, art: "Tag", von: d, bis: d, stunden: [], notiz: "" }));
+        klasseAbwNeu.sort((a, b) => (a.status === "Unentschuldigt" ? 0 : 1) - (b.status === "Unentschuldigt" ? 0 : 1) || a.von.localeCompare(b.von));
     }
     if (meine !== dashZaehler) return;   // neuere Abfrage läuft schon
     mein.sort((a, b) => a.std - b.std || a.k.localeCompare(b.k));
@@ -190,6 +201,14 @@ async function arbeitsbereichLaden() {
     $("listeEntschuldigt").innerHTML = nach("e");
     $("listeAbgemeldet").innerHTML = nach("g");
     $("listeUnentschuldigt").innerHTML = nach("u");
+
+    klasseAbw = klasseAbwNeu;
+    $("klasseAbwBox").style.display = meineKl.length ? "block" : "none";
+    $("countKlasseAbw").innerText = klasseAbw.length;
+    $("klasseAbwListe").innerHTML = klasseAbw.map((e, i) => `<div class="plan-zeile"><span><span class="abw-name st-${FARBE[e.status]}">${esc(e.name)}</span>
+        <small class="mute">${esc(e.klasse)} · ${esc(abwBereich(e))}${e.grund ? " · " + esc(e.grund) : ""}</small></span>
+        <button class="btn btn-secondary" style="padding:3px 10px;" onclick="abwBearbeitenOeffnen(${i})">Bearbeiten</button></div>`).join("")
+        || "<p class='mute'>Keine offenen Abwesenheiten.</p>";
 }
 
 async function oeffneStundeAusDashboard(k, std) {
@@ -518,7 +537,7 @@ function farbeWaehlen(s) {
     document.querySelectorAll(".farbe").forEach(b => b.classList.toggle("on", b.dataset.s === s));
 }
 
-async function oeffneAbwesenheitModal() {
+async function oeffneAbwesenheitModal(e) {
     const [ss] = await Promise.all([db.collection("schueler").get(), ladeGruende()]);
     const liste = ss.docs.map(d => d.data()).sort((a, b) => a.name.localeCompare(b.name, "de"));
     $("abwSchueler").innerHTML = '<option value="">Schüler wählen</option>' +
@@ -530,7 +549,21 @@ async function oeffneAbwesenheitModal() {
     $("abwVon").value = $("abwBis").value = datum() || heute();
     $("abwNotiz").value = "";
     farbeWaehlen("Unentschuldigt");
+    // Bearbeiten: vorhandenen Eintrag (oder eine Kippschalter-Meldung) in dasselbe Fenster laden
+    abwBearbeiten = e && e.id ? e : null;
+    $("abwTitel").innerText = abwBearbeiten ? "ABWESENHEIT BEARBEITEN" : "ABWESENHEIT";
+    $("abwSchueler").disabled = !!e;
+    if (e) {
+        $("abwSchueler").value = `${e.klasse}|${e.name}`;
+        $("abwArt").value = e.art || "Tag";
+        $("abwVon").value = e.von; $("abwBis").value = e.bis;
+        if (e.art === "Stunden") document.querySelectorAll("#abwStunden input").forEach(b => b.checked = (e.stunden || []).includes(+b.value));
+        if (e.grund && ![...$("abwGrund").options].some(o => o.value === e.grund)) $("abwGrund").add(new Option(e.grund, e.grund));
+        $("abwGrund").value = e.grund || "";
+        $("abwNotiz").value = e.notiz || "";
+    }
     abwSchuelerGeaendert();
+    if (e) farbeWaehlen(e.status);
     abwArtGeaendert();
     $("abwesenheitModal").style.display = "flex";
 }
@@ -554,7 +587,11 @@ function abwAlleStunden() {
     boxen.forEach(b => b.checked = !alle);
 }
 
-const schliesseAbwesenheitModal = () => $("abwesenheitModal").style.display = "none";
+function schliesseAbwesenheitModal() {
+    abwBearbeiten = null;
+    $("abwSchueler").disabled = false;
+    $("abwesenheitModal").style.display = "none";
+}
 
 async function speichereAbwesenheit() {
     const v = $("abwSchueler").value;
@@ -568,10 +605,9 @@ async function speichereAbwesenheit() {
         stunden = [...document.querySelectorAll("#abwStunden input:checked")].map(b => +b.value);
         if (!stunden.length) return alert("Bitte mindestens eine Stunde wählen.");
     }
-    await db.collection("abwesenheiten").add({
-        klasse: k, schueler: name, art, von, bis, stunden, status: abwFarbe,
-        grund: $("abwGrund").value, notiz: $("abwNotiz").value.trim(), von_kuerzel: profil.kuerzel || profil.name, uid
-    });
+    const felder = { art, von, bis, stunden, status: abwFarbe, grund: $("abwGrund").value, notiz: $("abwNotiz").value.trim() };
+    if (abwBearbeiten) await db.collection("abwesenheiten").doc(abwBearbeiten.id).update(felder);
+    else await db.collection("abwesenheiten").add({ klasse: k, schueler: name, ...felder, von_kuerzel: profil.kuerzel || profil.name, uid });
     schliesseAbwesenheitModal();
     if (ansicht === "detailView") oeffneStunde(stdNr);
     else if (ansicht === "klassenbuchView") klassenbuchLaden();
@@ -676,3 +712,5 @@ function startAlarm() {
     }, e => console.error("Alarm (Abwesenheiten) fehlgeschlagen", e));
     alarmStop = () => { s1(); s2(); };
 }
+
+const abwBearbeitenOeffnen = i => oeffneAbwesenheitModal(klasseAbw[i]);
