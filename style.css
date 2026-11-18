@@ -255,3 +255,5 @@ select.status-select { padding: 6px; }
 .sk input:checked + span { background: var(--success); }
 .sk input:focus-visible + span { outline: 2px solid var(--kreide); }
 .sk-alle { background: var(--kreide); color: #2b2300; cursor: pointer; }
+
+.plan-zeile { flex-wrap: wrap; }
